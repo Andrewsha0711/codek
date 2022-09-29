@@ -1,12 +1,10 @@
 package codek;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.Map;
 
 public class Program {
@@ -31,6 +29,10 @@ public class Program {
 			System.out.println("too large filename");
 			return null;
 		}
+		for (int i = 0; i < nameSize - nameBytes.length; i++) {
+			simpleFileName = ' ' + simpleFileName;
+		}
+		nameBytes = simpleFileName.getBytes();
 		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 		try {
 			FileInputStream fileInputStream = new FileInputStream(filePath);
@@ -42,7 +44,7 @@ public class Program {
 			outputStream.write((byte) noContextCompression);
 			outputStream.write((byte) interferenceProtection);
 			for (int i = 0; i < nameSize - nameBytes.length; i++) {
-				outputStream.write((byte) 0);
+				outputStream.write((byte) ' ');
 			}
 			outputStream.write(nameBytes);
 			outputStream.write(fileBytes);
@@ -62,20 +64,12 @@ public class Program {
 			for (int i = headersSize; i < fileBytes.length; i++) {
 				outputStream.write(fileBytes[i]);
 			}
-			byte[] nameBytes = new byte[nameSize];
+			char[] name = new char[nameSize];
 			for (int i = headersSize - nameSize; i < headersSize; i++) {
-				nameBytes[i - (headersSize - nameSize)] = fileBytes[i];
+				name[i - (headersSize - nameSize)] = (char) fileBytes[i];
 			}
-			int zeros = 0;
-			while(nameBytes[zeros] == 0) {
-				zeros += 1;
-			}
-			byte[] name = new byte[nameSize - zeros];
-			for(int i = 0; i < nameSize - zeros; i++) {
-				name[i] = nameBytes[i + zeros];
-			}
-			String fileName = new String(name);
-			return Map.entry(fileName.trim(), outputStream.toByteArray());
+			String fileName = (new String(name)).strip();
+			return Map.entry(fileName, outputStream.toByteArray());
 		} catch (IOException e) {
 			System.out.println("unpacking error");
 		}
@@ -85,7 +79,16 @@ public class Program {
 	public static void main(String[] args) {
 		if (args.length != 3) {
 			System.out.println("wrong arguments count");
-			return;
+			args = new String[3];
+			//pack
+//			args[0] = "pack";
+//			args[1] = "src/main/resources/temp/test.jpg";
+//			args[2] = "src/main/resources/result1.oleg";
+			//unpack
+//			args[0] = "unpack";
+//			args[1] = "src/main/resources/result1.oleg";
+//			args[2] = "src/main/resources";
+//			return;
 		}
 		if (args[0].equals("pack")) {
 			byte[] bytes = pack(args[1]);
@@ -104,8 +107,7 @@ public class Program {
 		if (args[0].equals("unpack")) {
 			Map.Entry<String, byte[]> fileMap = unpack(args[1]);
 			try {
-				File file = new File(args[2]);
-				FileOutputStream outputStream = new FileOutputStream(path);
+				FileOutputStream outputStream = new FileOutputStream(args[2] + "/" + fileMap.getKey());
 				outputStream.write(fileMap.getValue());
 				outputStream.close();
 			} catch (FileNotFoundException e) {
