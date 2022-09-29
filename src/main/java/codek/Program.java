@@ -1,10 +1,13 @@
 package codek;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.BufferOverflowException;
+import java.nio.ByteBuffer;
 import java.util.Map;
 
 public class Program {
@@ -14,87 +17,141 @@ public class Program {
 	private static final int contextCompression = 0;
 	private static final int noContextCompression = 0;
 	private static final int interferenceProtection = 0;
-//	private static final byte[] maxSize = { 0, 0, 0, (byte) 42, (byte) 94, (byte) 96, (byte) 72, (byte) 96 };
-	private static final int nameSize = 16;
+	private static final int size = 4;
+	private static final int nameSize = 128;
 
-	private static final int headersSize = byteSignature.length + 4 + nameSize;
+	private static final int headersSize = byteSignature.length + 4 + size + nameSize;
 
-	public static byte[] pack(String filePath) {
+	public static ByteArrayOutputStream pack(String absolutePath, String root, boolean flag) {
 
-		String[] str = filePath.split("/");
-		String simpleFileName = str[str.length - 1];
+		ByteArrayOutputStream total = new ByteArrayOutputStream();
+		//write headers flag
+		if(flag) {
+			try {
+				total.write(byteSignature);
+			} catch (IOException e1) {
+				System.out.println("packing error: failed to write signature");
+				e1.printStackTrace();
+			}
+			total.write((byte) version);
+			total.write((byte) contextCompression);
+			total.write((byte) noContextCompression);
+			total.write((byte) interferenceProtection);
+		}
 
-		byte[] nameBytes = simpleFileName.getBytes();
+		File file = new File(absolutePath);
+		if (file.isDirectory()) {
+			File[] childFiles = file.listFiles();
+			for (int i = 0; i < childFiles.length; i++) {
+				try {
+					String absPath = childFiles[i].getAbsolutePath();
+					String childRoot = absPath.substring(absPath.indexOf(root));
+					(pack(childFiles[i].getAbsolutePath(), childRoot, false)).writeTo(total);
+				} catch (IOException e) {
+					System.out.println("packing error: failed to join output streams");
+				}
+			}
+			return total;
+		}
+
+		byte[] nameBytes = root.getBytes();
 		if (nameBytes.length > nameSize) {
 			System.out.println("too large filename");
 			return null;
 		}
 		for (int i = 0; i < nameSize - nameBytes.length; i++) {
-			simpleFileName = ' ' + simpleFileName;
+			root = ' ' + root;
 		}
-		nameBytes = simpleFileName.getBytes();
+		nameBytes = root.getBytes();
 		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 		try {
-			FileInputStream fileInputStream = new FileInputStream(filePath);
+			FileInputStream fileInputStream = new FileInputStream(absolutePath);
 			byte[] fileBytes = fileInputStream.readAllBytes();
 			fileInputStream.close();
-			outputStream.write(byteSignature);
-			outputStream.write((byte) version);
-			outputStream.write((byte) contextCompression);
-			outputStream.write((byte) noContextCompression);
-			outputStream.write((byte) interferenceProtection);
-			for (int i = 0; i < nameSize - nameBytes.length; i++) {
-				outputStream.write((byte) ' ');
+			try {
+				byte[] sizeBytes = ByteBuffer.allocate(size).putInt(fileBytes.length).array();
+				outputStream.write(sizeBytes);
+			} catch (BufferOverflowException e) {
+				System.out.println("too large file: " + root);
+				return null;
 			}
 			outputStream.write(nameBytes);
 			outputStream.write(fileBytes);
-			return outputStream.toByteArray();
+			return outputStream;
 		} catch (IOException e) {
 			System.out.println("packing error");
 		}
 		return null;
 	}
 
-	public static Map.Entry<String, byte[]> unpack(String filePath) {
-		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+	public static void unpack(String filePath, String target) {
+		if (!target.endsWith("/")) {
+			target = target.concat("/");
+		}
 		try {
 			FileInputStream fileInputStream = new FileInputStream(filePath);
 			byte[] fileBytes = fileInputStream.readAllBytes();
 			fileInputStream.close();
-			for (int i = headersSize; i < fileBytes.length; i++) {
-				outputStream.write(fileBytes[i]);
+
+			int position = 0;
+			// TODO check headers
+			position += (headersSize - size - nameSize);
+
+			while (position != fileBytes.length) {
+				// 1 current file size
+				byte[] currentFileSize = new byte[size];
+				for (int i = 0; i < size; i++) {
+					currentFileSize[i] = fileBytes[position + i];//			args[0] = "unpack";
+//					args[1] = "/home/Andrewsha/workspace/temp/oleg.oleg";
+//					args[2] = "/home/Andrewsha/workspace/temp/test2";
+				}
+				position += size;
+				// 2 current file name
+				byte[] currentFileName = new byte[nameSize];
+				for (int i = 0; i < nameSize; i++) {
+					currentFileName[i] = fileBytes[position + i];
+				}
+				position += nameSize;
+				// 3 parse filename
+				String name11 = new String(currentFileName);
+				String fileName = target.concat((new String(currentFileName)).strip());
+				File file = new File(fileName);
+				file.getParentFile().mkdirs();
+				// 4 write current file content
+				int contentSize = ByteBuffer.wrap(currentFileSize).getInt();
+				if (file.createNewFile()) {
+					FileOutputStream fileOutputStream = new FileOutputStream(file.getAbsolutePath());
+					fileOutputStream.write(fileBytes, position,
+							contentSize);
+				}
+				position += contentSize;
 			}
-			char[] name = new char[nameSize];
-			for (int i = headersSize - nameSize; i < headersSize; i++) {
-				name[i - (headersSize - nameSize)] = (char) fileBytes[i];
-			}
-			String fileName = (new String(name)).strip();
-			return Map.entry(fileName, outputStream.toByteArray());
+
 		} catch (IOException e) {
 			System.out.println("unpacking error");
 		}
-		return null;
 	}
 
 	public static void main(String[] args) {
 		if (args.length != 3) {
 			System.out.println("wrong arguments count");
 			args = new String[3];
-			//pack
+			// pack
 //			args[0] = "pack";
-//			args[1] = "src/main/resources/temp/test.jpg";
-//			args[2] = "src/main/resources/result1.oleg";
-			//unpack
+//			args[1] = "/home/Andrewsha/workspace/temp/test";
+//			args[2] = "/home/Andrewsha/workspace/temp/oleg.oleg";
+			// unpack
 //			args[0] = "unpack";
-//			args[1] = "src/main/resources/result1.oleg";
-//			args[2] = "src/main/resources";
+//			args[1] = "/home/Andrewsha/workspace/temp/oleg.oleg";
+//			args[2] = "/home/Andrewsha/workspace/temp/test2";
 //			return;
 		}
 		if (args[0].equals("pack")) {
-			byte[] bytes = pack(args[1]);
+			String root = args[1].split("/")[args[1].split("/").length - 1];
+			ByteArrayOutputStream bytes = pack(args[1], root, true);
 			try {
 				FileOutputStream outputStream = new FileOutputStream(args[2]);
-				outputStream.write(bytes);
+				bytes.writeTo(outputStream);
 				outputStream.close();
 			} catch (FileNotFoundException e) {
 				// TODO Auto-generated catch block
@@ -105,18 +162,7 @@ public class Program {
 			}
 		}
 		if (args[0].equals("unpack")) {
-			Map.Entry<String, byte[]> fileMap = unpack(args[1]);
-			try {
-				FileOutputStream outputStream = new FileOutputStream(args[2] + "/" + fileMap.getKey());
-				outputStream.write(fileMap.getValue());
-				outputStream.close();
-			} catch (FileNotFoundException e) {
-				System.out.println("file not found");
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
+			unpack(args[1], args[2]);
 		}
 	}
 
