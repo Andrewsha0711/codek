@@ -8,7 +8,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
-import java.util.Map;
 
 public class Program {
 	private static final byte[] byteSignature = { Byte.parseByte("41", 16), Byte.parseByte("42", 16),
@@ -101,9 +100,7 @@ public class Program {
 				// 1 current file size
 				byte[] currentFileSize = new byte[size];
 				for (int i = 0; i < size; i++) {
-					currentFileSize[i] = fileBytes[position + i];//			args[0] = "unpack";
-//					args[1] = "/home/Andrewsha/workspace/temp/oleg.oleg";
-//					args[2] = "/home/Andrewsha/workspace/temp/test2";
+					currentFileSize[i] = fileBytes[position + i];
 				}
 				position += size;
 				// 2 current file name
@@ -113,7 +110,6 @@ public class Program {
 				}
 				position += nameSize;
 				// 3 parse filename
-				String name11 = new String(currentFileName);
 				String fileName = target.concat((new String(currentFileName)).strip());
 				File file = new File(fileName);
 				file.getParentFile().mkdirs();
