@@ -21,11 +21,10 @@ public class Program {
 
 	private static final int headersSize = byteSignature.length + 4 + size + nameSize;
 
-	public static ByteArrayOutputStream pack(String absolutePath, String root, boolean flag) {
-
-		ByteArrayOutputStream total = new ByteArrayOutputStream();
-		//write headers flag
-		if(flag) {
+	public static ByteArrayOutputStream pack(String absolutePath, String root, boolean flag,
+			ByteArrayOutputStream total) {
+		// write headers flag
+		if (flag) {
 			try {
 				total.write(byteSignature);
 			} catch (IOException e1) {
@@ -42,13 +41,9 @@ public class Program {
 		if (file.isDirectory()) {
 			File[] childFiles = file.listFiles();
 			for (int i = 0; i < childFiles.length; i++) {
-				try {
-					String absPath = childFiles[i].getAbsolutePath();
-					String childRoot = absPath.substring(absPath.indexOf(root));
-					(pack(childFiles[i].getAbsolutePath(), childRoot, false)).writeTo(total);
-				} catch (IOException e) {
-					System.out.println("packing error: failed to join output streams");
-				}
+				String absPath = childFiles[i].getAbsolutePath();
+				String childRoot = absPath.substring(absPath.indexOf(root));
+				pack(childFiles[i].getAbsolutePath(), childRoot, false, total);
 			}
 			return total;
 		}
@@ -62,21 +57,20 @@ public class Program {
 			root = ' ' + root;
 		}
 		nameBytes = root.getBytes();
-		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 		try {
 			FileInputStream fileInputStream = new FileInputStream(absolutePath);
 			byte[] fileBytes = fileInputStream.readAllBytes();
 			fileInputStream.close();
 			try {
 				byte[] sizeBytes = ByteBuffer.allocate(size).putInt(fileBytes.length).array();
-				outputStream.write(sizeBytes);
+				total.write(sizeBytes);
 			} catch (BufferOverflowException e) {
 				System.out.println("too large file: " + root);
 				return null;
 			}
-			outputStream.write(nameBytes);
-			outputStream.write(fileBytes);
-			return outputStream;
+			total.write(nameBytes);
+			total.write(fileBytes);
+			return total;
 		} catch (IOException e) {
 			System.out.println("packing error");
 		}
@@ -96,7 +90,7 @@ public class Program {
 			// TODO check headers
 			position += (headersSize - size - nameSize);
 
-			while (position != fileBytes.length) {
+			while (position < fileBytes.length - 1) {
 				// 1 current file size
 				byte[] currentFileSize = new byte[size];
 				for (int i = 0; i < size; i++) {
@@ -117,8 +111,7 @@ public class Program {
 				int contentSize = ByteBuffer.wrap(currentFileSize).getInt();
 				if (file.createNewFile()) {
 					FileOutputStream fileOutputStream = new FileOutputStream(file.getAbsolutePath());
-					fileOutputStream.write(fileBytes, position,
-							contentSize);
+					fileOutputStream.write(fileBytes, position, contentSize);
 				}
 				position += contentSize;
 			}
@@ -129,13 +122,16 @@ public class Program {
 	}
 
 	public static void main(String[] args) {
-		if (args.length != 3) {
+		if (args.length < 3) {
 			System.out.println("wrong arguments count");
-			args = new String[3];
+			args = new String[6];
 			// pack
 //			args[0] = "pack";
-//			args[1] = "/home/Andrewsha/workspace/temp/test";
-//			args[2] = "/home/Andrewsha/workspace/temp/oleg.oleg";
+//			args[1] = "/home/Andrewsha/workspace/temp/test/1.jpg";
+//			args[2] = "/home/Andrewsha/workspace/temp/test/dallas.png";
+//			args[3] = "/home/Andrewsha/workspace/temp/test/phone";
+//			args[4] = "/home/Andrewsha/workspace/temp/test/test1";
+//			args[5] = "/home/Andrewsha/workspace/temp/oleg.oleg";
 			// unpack
 //			args[0] = "unpack";
 //			args[1] = "/home/Andrewsha/workspace/temp/oleg.oleg";
@@ -143,10 +139,16 @@ public class Program {
 //			return;
 		}
 		if (args[0].equals("pack")) {
-			String root = args[1].split("/")[args[1].split("/").length - 1];
-			ByteArrayOutputStream bytes = pack(args[1], root, true);
+			String target = args[args.length - 1];
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			boolean writeHeadersFlag = true;
+			for (int i = 1; i < args.length - 1; i++) {
+				String root = args[i].split("/")[args[i].split("/").length - 1];
+				bytes = pack(args[i], root, writeHeadersFlag, bytes);
+				writeHeadersFlag = false;
+			}
 			try {
-				FileOutputStream outputStream = new FileOutputStream(args[2]);
+				FileOutputStream outputStream = new FileOutputStream(target);
 				bytes.writeTo(outputStream);
 				outputStream.close();
 			} catch (FileNotFoundException e) {
